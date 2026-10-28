@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-agent
+  namespace: banking
+  labels:
+    app: finance-agent
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: finance-agent
+  template:
+    metadata:
+      labels:
+        app: finance-agent
+    spec:
+      enableServiceLinks: false
+      imagePullSecrets:
+        - name: ghcr-auth
+      containers:
+        - name: finance-agent
+          # Verify this image exists before first sync.
+          image: ghcr.io/techbleat/sre2026-final-project/finance-agent:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 9001
+              protocol: TCP
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: finance-agent-openai
+                  key: OPENAI_API_KEY
+            - name: OPENAI_MODEL
+              value: "gpt-4.1-mini"
+            - name: KEYCLOAK_URL
+              value: "https://auth.techbleat-training.com"
+            - name: KEYCLOAK_ISSUER
+              value: "https://auth.techbleat-training.com/realms/banking"
+            - name: KEYCLOAK_REALM
+              value: "banking"
+            # Verify this audience against a real access token and application code.
+            - name: KEYCLOAK_AUDIENCE
+              value: "account"
+            - name: TRANSACTION_API_URL
+              value: "http://transaction-service.banking.svc.cluster.local:8080"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finance-agent
+  namespace: banking
+  labels:
+    app: finance-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: finance-agent
+  ports:
+    - name: http
+      port: 9001
+      targetPort: http
+      protocol: TCP

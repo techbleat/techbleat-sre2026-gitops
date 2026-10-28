@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-service
+  namespace: banking
+  labels:
+    app: transaction-service
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: transaction-service
+  template:
+    metadata:
+      labels:
+        app: transaction-service
+    spec:
+      enableServiceLinks: false
+      imagePullSecrets:
+        - name: ghcr-auth
+      containers:
+        - name: transaction-service
+          # Verify the running image reference before first Argo CD sync.
+          image: ghcr.io/techbleat/sre2026-final-project/transaction-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres.keycloak.svc.cluster.local:5432/bankingdb"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "bankuser"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: banking-db
+                  key: password
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka.banking.svc.cluster.local:29092"
+            - name: REDIS_HOST
+              value: "redis.banking.svc.cluster.local"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: SERVER_PORT
+              value: "8080"
+          resources:
+            requests:
+              cpu: 150m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transaction-service
+  namespace: banking
+  labels:
+    app: transaction-service
+spec:
+  type: ClusterIP
+  selector:
+    app: transaction-service
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

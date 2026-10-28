@@ -1,0 +1,19 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: banking-frontend-route
+  namespace: banking
+spec:
+  hosts:
+    - bank.techbleat-training.com
+  gateways:
+    - demo/nginx-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: frontend.banking.svc.cluster.local
+            port:
+              number: 80

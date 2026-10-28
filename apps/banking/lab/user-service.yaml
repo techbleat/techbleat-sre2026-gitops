@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: banking
+  labels:
+    app: user-service
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      enableServiceLinks: false
+      imagePullSecrets:
+        - name: ghcr-auth
+      containers:
+        - name: user-service
+          image: ghcr.io/techbleat/banking-user-service:v1
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: banking-user-config
+                  key: DATABASE_URL
+            - name: FRONTEND_ORIGIN
+              value: "https://bank.techbleat-training.com"
+            - name: KEYCLOAK_URL
+              value: "https://auth.techbleat-training.com"
+            - name: KEYCLOAK_REALM
+              value: "banking"
+            - name: KEYCLOAK_ADMIN_CLIENT_ID
+              value: "banking-provisioner"
+            - name: KEYCLOAK_ADMIN_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: banking-keycloak
+                  key: client-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: banking
+  labels:
+    app: user-service
+spec:
+  type: ClusterIP
+  selector:
+    app: user-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+      protocol: TCP

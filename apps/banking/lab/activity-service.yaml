@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: activity-service
+  namespace: banking
+  labels:
+    app: activity-service
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: activity-service
+  template:
+    metadata:
+      labels:
+        app: activity-service
+    spec:
+      enableServiceLinks: false
+      imagePullSecrets:
+        - name: ghcr-auth
+      containers:
+        - name: activity-service
+          image: ghcr.io/techbleat/sre2026-final-project/activity-service:e680e9f68ae6b11359ab1176cfa8edecab55d29a
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8001
+              protocol: TCP
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: banking-user-config
+                  key: DATABASE_URL
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka.banking.svc.cluster.local:29092"
+            - name: FRONTEND_ORIGIN
+              value: "https://bank.techbleat-training.com"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: activity-service
+  namespace: banking
+  labels:
+    app: activity-service
+spec:
+  type: ClusterIP
+  selector:
+    app: activity-service
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+      protocol: TCP
